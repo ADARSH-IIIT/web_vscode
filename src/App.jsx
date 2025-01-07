@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BookOpen, File, Folder, ChevronRight, ChevronDown, Upload, X, Download } from 'lucide-react';
-import JSZip from 'jszip';
+import { BookOpen, File, Folder, ChevronRight, ChevronDown, Upload, X } from 'lucide-react';
 
 const STORAGE_KEY = 'vscode_clone_data';
-const EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hour  in milliseconds
+const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes in milliseconds
 
 const App = () => {
   const [files, setFiles] = useState([]);
@@ -19,12 +18,14 @@ const App = () => {
       if (storedData) {
         const { data, timestamp } = JSON.parse(storedData);
         const now = new Date().getTime();
-
+        
+        // Check if data hasn't expired
         if (now - timestamp < EXPIRATION_TIME) {
           setFiles(data.files);
           setOpenFiles(data.openFiles);
           setActiveFile(data.activeFile);
         } else {
+          // Clear expired data
           localStorage.removeItem(STORAGE_KEY);
         }
       }
@@ -39,14 +40,14 @@ const App = () => {
       const data = {
         files,
         openFiles,
-        activeFile,
+        activeFile
       };
-
+      
       const storageData = {
         data,
-        timestamp: new Date().getTime(),
+        timestamp: new Date().getTime()
       };
-
+      
       localStorage.setItem(STORAGE_KEY, JSON.stringify(storageData));
     };
 
@@ -55,48 +56,11 @@ const App = () => {
     }
   }, [files, openFiles, activeFile]);
 
-  // Function to download a single file
-  const downloadFile = (file) => {
-    const blob = new Blob([file.content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Function to download the entire folder as a ZIP
-  const downloadFolder = async () => {
-    const zip = new JSZip();
-
-    const addFilesToZip = (items, currentPath = '') => {
-      items.forEach((item) => {
-        if (item.type === 'file') {
-          zip.file(currentPath + item.name, item.content);
-        } else if (item.type === 'folder') {
-          addFilesToZip(item.children, currentPath + item.name + '/');
-        }
-      });
-    };
-
-    addFilesToZip(files);
-
-    try {
-      const content = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'project-files.zip';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error creating zip file:', error);
-    }
+  const clearStorage = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setFiles([]);
+    setOpenFiles([]);
+    setActiveFile(null);
   };
 
   const handleFileUpload = async (event) => {
@@ -104,6 +68,9 @@ const App = () => {
       event.target.value = '';
       return;
     }
+
+    // Clear existing data before uploading new folder
+    clearStorage();
 
     const items = event.target.files;
 
@@ -131,7 +98,9 @@ const App = () => {
               id: Math.random().toString(36).substr(2, 9),
             });
           } else {
-            let folder = currentLevel.find((f) => f.name === part && f.type === 'folder');
+            let folder = currentLevel.find(
+              (f) => f.name === part && f.type === 'folder'
+            );
             if (!folder) {
               folder = {
                 name: part,
@@ -197,13 +166,14 @@ const App = () => {
 
     const updatedFiles = updateFilesRecursive(files);
     setFiles(updatedFiles);
-
+    
+    // Update the active file in both state and openFiles
     const updatedActiveFile = { ...activeFile, content: newContent };
     setActiveFile(updatedActiveFile);
-
-    setOpenFiles(
-      openFiles.map((file) => (file.id === activeFile.id ? updatedActiveFile : file))
-    );
+    
+    setOpenFiles(openFiles.map(file => 
+      file.id === activeFile.id ? updatedActiveFile : file
+    ));
   };
 
   const FileTreeItem = ({ item, depth = 0 }) => {
@@ -238,8 +208,16 @@ const App = () => {
           }}
         >
           {item.type === 'folder' &&
-            (item.isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />)}
-          {item.type === 'folder' ? <Folder className="w-4 h-4 mx-1" /> : <File className="w-4 h-4 mx-1" />}
+            (item.isOpen ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            ))}
+          {item.type === 'folder' ? (
+            <Folder className="w-4 h-4 mx-1" />
+          ) : (
+            <File className="w-4 h-4 mx-1" />
+          )}
           <span className="ml-1 text-sm">{item.name}</span>
         </div>
         {item.type === 'folder' && item.isOpen && (
@@ -261,7 +239,7 @@ const App = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-gray-900 text-white ">
+    <div className="h-screen w-screen flex flex-col bg-gray-900 text-white overflow-hidden">
       {/* Title Bar */}
       <div className="h-8 flex-shrink-0 bg-gray-800 flex items-center px-4 justify-between">
         <div className="flex items-center">
@@ -269,24 +247,13 @@ const App = () => {
           <span className="text-sm">VSCode Clone</span>
         </div>
         <div className="flex items-center gap-2">
-          {activeFile && (
-            <button
-              onClick={() => downloadFile(activeFile)}
-              className="flex items-center px-2 py-1 text-sm bg-green-600 rounded hover:bg-green-700"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Download Selected File
-            </button>
-          )}
-          {files.length > 0 && (
-            <button
-              onClick={downloadFolder}
-              className="flex items-center px-2 py-1 text-sm bg-blue-600 rounded hover:bg-blue-700"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Download Complete Folder
-            </button>
-          )}
+          <button
+            onClick={clearStorage}
+            className="flex items-center px-2 py-1 text-sm bg-red-600 rounded hover:bg-red-700"
+          >
+            <X className="w-4 h-4 mr-1" />
+            Clear Data
+          </button>
           <button
             onClick={handleUploadClick}
             className="flex items-center px-2 py-1 text-sm bg-gray-700 rounded hover:bg-gray-600"
@@ -329,7 +296,7 @@ const App = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1 w-full">
+      <div className="flex flex-1 w-full overflow-hidden">
         {/* Sidebar */}
         <div
           className="bg-gray-800 flex-shrink-0 border-r border-gray-700 flex flex-col"
@@ -341,7 +308,9 @@ const App = () => {
               <FileTreeItem key={file.id} item={file} />
             ))}
             {files.length === 0 && (
-              <div className="p-4 text-sm text-gray-500 text-center">No files uploaded yet</div>
+              <div className="p-4 text-sm text-gray-500 text-center">
+                No files uploaded yet
+              </div>
             )}
           </div>
         </div>
@@ -369,9 +338,9 @@ const App = () => {
         />
 
         {/* Editor */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {activeFile ? (
-            <div className="h-full flex flex-col ">
+            <div className="h-full flex flex-col overflow-hidden">
               <div className="px-4 py-2 text-sm text-gray-400 bg-gray-800 border-b border-gray-700 flex-shrink-0">
                 {activeFile.name}
               </div>
