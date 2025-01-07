@@ -333,17 +333,18 @@ const App = () => {
         {/* Editor */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {activeFile ? (
-            <div className="h-full flex flex-col overflow-hidden">
+            <div className="h-full flex flex-col ">
               <div className="px-4 py-2 text-sm text-gray-400 bg-gray-800 border-b border-gray-700 flex-shrink-0">
                 {activeFile.name}
               </div>
-              <div className="flex-1 p-4 min-w-0 overflow-auto">
+              <div className="flex-1 p-4 overflow-hidden">
                 <textarea
                   key={activeFile.id}
-                  className="w-full h-full min-w-0 bg-gray-900 text-white font-mono outline-none resize-none p-2"
+                  className="w-full h-full  bg-gray-900 text-white font-mono outline-none resize-none p-2 overflow-y-auto"
                   value={activeFile.content}
                   onChange={(e) => updateFileContent(e.target.value)}
-                  spellCheck="false"
+                  spellCheck="false" 
+                  
                 />
               </div>
             </div>
