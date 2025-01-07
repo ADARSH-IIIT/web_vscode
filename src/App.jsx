@@ -248,13 +248,6 @@ const App = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={clearStorage}
-            className="flex items-center px-2 py-1 text-sm bg-red-600 rounded hover:bg-red-700"
-          >
-            <X className="w-4 h-4 mr-1" />
-            Clear Data
-          </button>
-          <button
             onClick={handleUploadClick}
             className="flex items-center px-2 py-1 text-sm bg-gray-700 rounded hover:bg-gray-600"
           >
