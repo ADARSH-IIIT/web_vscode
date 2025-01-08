@@ -1,5 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BookOpen, File, Folder, ChevronRight, ChevronDown, Upload, X, Download } from 'lucide-react';
+import { 
+  BookOpen, 
+  File, 
+  Folder, 
+  ChevronRight, 
+  ChevronDown, 
+  Upload, 
+  X, 
+  Download, 
+  Menu,
+  FilePlus,
+  FolderPlus,
+  Undo
+} from 'lucide-react';
 
 const STORAGE_KEY = 'vscode_clone_data';
 const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes in milliseconds
@@ -8,8 +21,12 @@ const App = () => {
   const [files, setFiles] = useState([]);
   const [openFiles, setOpenFiles] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(250);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const fileInputRef = useRef(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [actionHistory, setActionHistory] = useState([]);
 
   // Load data from localStorage on initial render
   useEffect(() => {
@@ -54,14 +71,20 @@ const App = () => {
     }
   }, [files, openFiles, activeFile]);
 
+  const toggleSidebar = () => {
+    setIsTransitioning(true);
+    setIsSidebarOpen(!isSidebarOpen);
+    setTimeout(() => setIsTransitioning(false), 300);
+  };
+
   const clearStorage = () => {
     localStorage.removeItem(STORAGE_KEY);
     setFiles([]);
     setOpenFiles([]);
     setActiveFile(null);
+    setSelectedItem(null);
   };
 
-  // New function to download current file
   const downloadCurrentFile = () => {
     if (!activeFile) return;
 
@@ -76,11 +99,9 @@ const App = () => {
     URL.revokeObjectURL(url);
   };
 
-  // New function to download entire folder
   const downloadFolder = async () => {
     if (files.length === 0) return;
 
-    // Create a ZIP file
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
 
@@ -98,7 +119,6 @@ const App = () => {
 
     addFilesToZip(files);
 
-    // Generate and download the ZIP file
     const content = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(content);
     const a = document.createElement('a');
@@ -220,7 +240,126 @@ const App = () => {
     ));
   };
 
-  const FileTreeItem = ({ item, depth = 0 }) => {
+  const addItemToParent = (items, parentId, newItem) => {
+    if (!parentId) {
+      return [...items, newItem];
+    }
+
+    return items.map(item => {
+      if (item.id === parentId) {
+        return {
+          ...item,
+          isOpen: true,
+          children: [...(item.children || []), newItem]
+        };
+      }
+      if (item.children) {
+        return {
+          ...item,
+          children: addItemToParent(item.children, parentId, newItem)
+        };
+      }
+      return item;
+    });
+  };
+
+  const handleCreateFile = () => {
+    const fileName = prompt("Enter file name:", "new-file.txt");
+    if (!fileName) return;
+
+    const newFile = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: fileName,
+      type: 'file',
+      content: '',
+    };
+
+    const parentId = selectedItem?.type === 'folder' ? selectedItem.id : selectedItem?.parentId;
+    const updatedFiles = addItemToParent(files, parentId, newFile);
+    setFiles(updatedFiles);
+    
+    setActionHistory([
+      ...actionHistory,
+      {
+        type: 'create',
+        item: newFile,
+        parentId
+      }
+    ]);
+  };
+
+  const handleCreateFolder = () => {
+    const folderName = prompt("Enter folder name:", "new-folder");
+    if (!folderName) return;
+
+    const newFolder = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: folderName,
+      type: 'folder',
+      isOpen: true,
+      children: [],
+    };
+
+    const parentId = selectedItem?.type === 'folder' ? selectedItem.id : selectedItem?.parentId;
+    const updatedFiles = addItemToParent(files, parentId, newFolder);
+    setFiles(updatedFiles);
+
+    setActionHistory([
+      ...actionHistory,
+      {
+        type: 'create',
+        item: newFolder,
+        parentId
+      }
+    ]);
+  };
+
+  const removeItemFromTree = (items, itemId) => {
+    return items.filter(item => {
+      if (item.id === itemId) {
+        return false;
+      }
+      if (item.children) {
+        item.children = removeItemFromTree(item.children, itemId);
+      }
+      return true;
+    });
+  };
+
+  const handleUndo = () => {
+    if (actionHistory.length === 0) return;
+
+    const lastAction = actionHistory[actionHistory.length - 1];
+    let updatedFiles = [...files];
+
+    if (lastAction.type === 'create') {
+      updatedFiles = removeItemFromTree(updatedFiles, lastAction.item.id);
+      
+      if (activeFile?.id === lastAction.item.id) {
+        setActiveFile(null);
+      }
+      if (selectedItem?.id === lastAction.item.id) {
+        setSelectedItem(null);
+      }
+      setOpenFiles(openFiles.filter(f => f.id !== lastAction.item.id));
+    }
+
+    setFiles(updatedFiles);
+    setActionHistory(actionHistory.slice(0, -1));
+  };
+
+  const FileTreeItem = ({ item, depth = 0, parentId = null }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [editName, setEditName] = useState(item.name);
+    const inputRef = useRef(null);
+
+    useEffect(() => {
+      if (isEditing && inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.select();
+      }
+    }, [isEditing]);
+
     const toggleFolder = (item) => {
       const updateFiles = (files) =>
         files.map((f) => {
@@ -236,44 +375,140 @@ const App = () => {
       setFiles(updateFiles(files));
     };
 
+    const handleNameSubmit = () => {
+      if (editName.trim()) {
+        const updateFilename = (files) =>
+          files.map((f) => {
+            if (f.id === item.id) {
+              return { ...f, name: editName.trim() };
+            }
+            if (f.children) {
+              return { ...f, children: updateFilename(f.children) };
+            }
+            return f;
+          });
+
+        setFiles(updateFilename(files));
+        
+        if (item.type === 'file') {
+          setOpenFiles(openFiles.map(f => 
+            f.id === item.id ? { ...f, name: editName.trim() } : f
+          ));
+          if (activeFile?.id === item.id) {
+            setActiveFile({ ...activeFile, name: editName.trim() });
+          }
+        }
+      }
+      setIsEditing(false);
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        handleNameSubmit();
+      } else if (e.key === 'Escape') {
+        setIsEditing(false);
+        setEditName(item.name);
+      }
+    };
+
+    const handleClick = (e) => {
+      e.stopPropagation();
+      if (!isEditing) {
+        setSelectedItem({ ...item, parentId });
+        if (item.type === 'file') {
+          openFileInTab(item);
+        }
+      }
+    };
+
     return (
-      <div>
+      <div    >
         <div
           className={`flex items-center p-1 hover:bg-gray-700 cursor-pointer ${
-            activeFile?.id === item.id ? 'bg-gray-700' : ''
+            selectedItem?.id === item.id ? 'bg-gray-700' : ''
           }`}
           style={{ paddingLeft: `${depth * 16}px` }}
-          onClick={() => {
-            if (item.type === 'file') {
-              openFileInTab(item);
-            } else {
-              toggleFolder(item);
+          onClick={handleClick}
+          onDoubleClick={() => {
+            if (!isEditing) {
+              if (item.type === 'folder') {
+                toggleFolder(item);
+              } else {
+                setIsEditing(true);
+              }
             }
           }}
         >
-          {item.type === 'folder' &&
-            (item.isOpen ? (
-              <ChevronDown className="w-4 h-4" />
-            ) : (
-              <ChevronRight className="w-4 h-4" />
-            ))}
+          {item.type === 'folder' && (
+            <span onClick={(e) => {
+              e.stopPropagation();
+              toggleFolder(item);
+            }}>
+              {item.isOpen ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )}
+            </span>
+          )}
           {item.type === 'folder' ? (
             <Folder className="w-4 h-4 mx-1" />
           ) : (
             <File className="w-4 h-4 mx-1" />
           )}
-          <span className="ml-1 text-sm">{item.name}</span>
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              className="bg-gray-800 text-white text-sm outline-none px-1 w-40"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={handleNameSubmit}
+              onKeyDown={handleKeyDown}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="ml-1 text-sm">{item.name}</span>
+          )}
         </div>
         {item.type === 'folder' && item.isOpen && (
           <div>
             {item.children.map((child) => (
-              <FileTreeItem key={child.id} item={child} depth={depth + 1} />
+              <FileTreeItem 
+                key={child.id}
+                item={child} 
+                depth={depth + 1}
+                parentId={item.id}
+              />
             ))}
           </div>
         )}
       </div>
     );
   };
+
+  const ExplorerHeader = () => (
+    <div className="p-2 text-sm font-semibold flex-shrink-0 flex items-center justify-between">
+      <span>EXPLORER</span>
+      <div className="flex items-center gap-2">
+        <FilePlus
+          className="w-4 h-4 cursor-pointer hover:text-blue-400"
+          onClick={handleCreateFile}
+        />
+        <FolderPlus
+          className="w-4 h-4 cursor-pointer hover:text-blue-400"
+          onClick={handleCreateFolder}
+        />
+        <Undo
+          className={`w-4 h-4 cursor-pointer ${
+            actionHistory.length > 0 
+              ? 'hover:text-blue-400' 
+              : 'text-gray-600 cursor-not-allowed'
+          }`}
+          onClick={handleUndo}
+        />
+      </div>
+    </div>
+  );
 
   const handleUploadClick = () => {
     if (fileInputRef.current) {
@@ -286,9 +521,13 @@ const App = () => {
     <div className="h-screen w-screen flex flex-col bg-gray-900 text-white overflow-hidden">
       {/* Title Bar */}
       <div className="h-8 flex-shrink-0 bg-gray-800 flex items-center px-4 justify-between">
-        <div className="flex items-center">
-          <BookOpen className="w-4 h-4 mr-2" />
-          <span className="text-sm">VSCode Clone</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleSidebar}
+            className="p-1 hover:bg-gray-700 rounded"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -334,7 +573,7 @@ const App = () => {
         />
       </div>
 
-      {/* Rest of the component remains unchanged */}
+      {/* Tabs for Open Files */}
       <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 flex items-center">
         {openFiles.map((file) => (
           <div
@@ -356,15 +595,26 @@ const App = () => {
         ))}
       </div>
 
+      {/* Main Content */}
       <div className="flex flex-1 w-full overflow-hidden">
+        {/* Sidebar with transition */}
         <div
-          className="bg-gray-800 flex-shrink-0 border-r border-gray-700 flex flex-col"
-          style={{ width: sidebarWidth }}
+          className={`bg-gray-800 flex-shrink-0 border-r border-gray-700 flex flex-col transition-all duration-300 ease-in-out ${
+            isTransitioning ? 'transition-gpu' : ''
+          }`}
+          style={{ 
+            width: isSidebarOpen ? `${sidebarWidth}px` : '0',
+            opacity: isSidebarOpen ? 1 : 0
+          }}
         >
-          <div className="p-2 text-sm font-semibold flex-shrink-0">EXPLORER</div>
+          <ExplorerHeader />
           <div className="overflow-y-auto flex-1">
             {files.map((file) => (
-              <FileTreeItem key={file.id} item={file} />
+              <FileTreeItem 
+                key={file.id} 
+                item={file}
+                parentId={null}
+              />
             ))}
             {files.length === 0 && (
               <div className="p-4 text-sm text-gray-500 text-center">
@@ -374,27 +624,31 @@ const App = () => {
           </div>
         </div>
 
-        <div
-          className="w-1 cursor-col-resize bg-gray-700 hover:bg-blue-500 flex-shrink-0"
-          onMouseDown={(e) => {
-            const startX = e.clientX;
-            const startWidth = sidebarWidth;
+        {/* Resize Handle */}
+        {isSidebarOpen && (
+          <div
+            className="w-1 cursor-col-resize bg-gray-700 hover:bg-blue-500 flex-shrink-0"
+            onMouseDown={(e) => {
+              const startX = e.clientX;
+              const startWidth = sidebarWidth;
 
-            const onMouseMove = (e) => {
-              const newWidth = startWidth + (e.clientX - startX);
-              setSidebarWidth(Math.max(100, newWidth));
-            };
+              const onMouseMove = (e) => {
+                const newWidth = startWidth + (e.clientX - startX);
+                setSidebarWidth(Math.max(100, newWidth));
+              };
 
-            const onMouseUp = () => {
-              document.removeEventListener('mousemove', onMouseMove);
-              document.removeEventListener('mouseup', onMouseUp);
-            };
+              const onMouseUp = () => {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+              };
 
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-          }}
-        />
+              document.addEventListener('mousemove', onMouseMove);
+              document.addEventListener('mouseup', onMouseUp);
+            }}
+          />
+        )}
 
+        {/* Editor Area */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {activeFile ? (
             <div className="h-full flex flex-col">
