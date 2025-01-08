@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  BookOpen, 
+ 
   File, 
   Folder, 
   ChevronRight, 
@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 const STORAGE_KEY = 'vscode_clone_data';
-const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes in milliseconds
+const EXPIRATION_TIME = 24 *  60 * 60 * 1000; // 10 minutes in milliseconds
 
 const App = () => {
   const [files, setFiles] = useState([]);
@@ -520,46 +520,48 @@ const App = () => {
   return (
     <div className="h-screen w-screen flex flex-col bg-gray-900 text-white overflow-hidden">
       {/* Title Bar */}
-      <div className="h-8 flex-shrink-0 bg-gray-800 flex items-center px-4 justify-between">
-        <div className="flex items-center gap-2">
+      <div className="h-10 flex-shrink-0 bg-gray-800 flex items-center px-4 justify-between">
+        <div className="flex items-center gap-2 ">
           <button
             onClick={toggleSidebar}
-            className="p-1 hover:bg-gray-700 rounded"
+            className="p-0 hover:bg-gray-700 rounded"
           >
-            <Menu className="w-4 h-4" />
+            <Menu className="w-4 h-4  bg-gray-700" />
           </button>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleUploadClick}
-            className="flex items-center px-2 py-1 text-sm bg-gray-700 rounded hover:bg-gray-600"
-          >
-            <Upload className="w-4 h-4 mr-1" />
-            Upload Folder
-          </button>
+        <div className="flex  items-center gap-2">
+        
           <button
             onClick={downloadCurrentFile}
             disabled={!activeFile}
             className={`flex items-center px-2 py-1 text-sm rounded ${
               activeFile 
-                ? 'bg-gray-700 hover:bg-gray-600' 
+                ? 'bg-yellow-500 hover:bg-yellow-600' 
                 : 'bg-gray-800 cursor-not-allowed text-gray-500'
             }`}
           >
             <Download className="w-4 h-4 mr-1" />
-            Download File
+            Download Selected File
           </button>
           <button
             onClick={downloadFolder}
             disabled={files.length === 0}
             className={`flex items-center px-2 py-1 text-sm rounded ${
               files.length > 0 
-                ? 'bg-gray-700 hover:bg-gray-600' 
+                ? 'bg-green-500 hover:bg-green-700' 
                 : 'bg-gray-800 cursor-not-allowed text-gray-500'
             }`}
           >
             <Download className="w-4 h-4 mr-1" />
-            Download All
+            Download Complete folder
+          </button>
+
+          <button
+            onClick={handleUploadClick}
+            className="flex items-center px-2 py-1 text-sm bg-red-500 rounded hover:bg-red-700"
+          >
+            <Upload className="w-4 h-4 mr-1  " />
+            Upload New Folder
           </button>
         </div>
         <input
