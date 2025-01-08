@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BookOpen, File, Folder, ChevronRight, ChevronDown, Upload, X } from 'lucide-react';
+import { BookOpen, File, Folder, ChevronRight, ChevronDown, Upload, X, Download } from 'lucide-react';
 
 const STORAGE_KEY = 'vscode_clone_data';
 const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes in milliseconds
@@ -19,13 +19,11 @@ const App = () => {
         const { data, timestamp } = JSON.parse(storedData);
         const now = new Date().getTime();
         
-        // Check if data hasn't expired
         if (now - timestamp < EXPIRATION_TIME) {
           setFiles(data.files);
           setOpenFiles(data.openFiles);
           setActiveFile(data.activeFile);
         } else {
-          // Clear expired data
           localStorage.removeItem(STORAGE_KEY);
         }
       }
@@ -63,15 +61,62 @@ const App = () => {
     setActiveFile(null);
   };
 
+  // New function to download current file
+  const downloadCurrentFile = () => {
+    if (!activeFile) return;
+
+    const blob = new Blob([activeFile.content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = activeFile.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // New function to download entire folder
+  const downloadFolder = async () => {
+    if (files.length === 0) return;
+
+    // Create a ZIP file
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+
+    const addFilesToZip = (items, parentPath = '') => {
+      items.forEach(item => {
+        const itemPath = parentPath ? `${parentPath}/${item.name}` : item.name;
+        
+        if (item.type === 'file') {
+          zip.file(itemPath, item.content);
+        } else if (item.type === 'folder') {
+          addFilesToZip(item.children, itemPath);
+        }
+      });
+    };
+
+    addFilesToZip(files);
+
+    // Generate and download the ZIP file
+    const content = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'project.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleFileUpload = async (event) => {
     if (!event.target.files || event.target.files.length === 0) {
       event.target.value = '';
       return;
     }
 
-    // Clear existing data before uploading new folder
     clearStorage();
-
     const items = event.target.files;
 
     const processFiles = async (items) => {
@@ -167,7 +212,6 @@ const App = () => {
     const updatedFiles = updateFilesRecursive(files);
     setFiles(updatedFiles);
     
-    // Update the active file in both state and openFiles
     const updatedActiveFile = { ...activeFile, content: newContent };
     setActiveFile(updatedActiveFile);
     
@@ -254,6 +298,30 @@ const App = () => {
             <Upload className="w-4 h-4 mr-1" />
             Upload Folder
           </button>
+          <button
+            onClick={downloadCurrentFile}
+            disabled={!activeFile}
+            className={`flex items-center px-2 py-1 text-sm rounded ${
+              activeFile 
+                ? 'bg-gray-700 hover:bg-gray-600' 
+                : 'bg-gray-800 cursor-not-allowed text-gray-500'
+            }`}
+          >
+            <Download className="w-4 h-4 mr-1" />
+            Download File
+          </button>
+          <button
+            onClick={downloadFolder}
+            disabled={files.length === 0}
+            className={`flex items-center px-2 py-1 text-sm rounded ${
+              files.length > 0 
+                ? 'bg-gray-700 hover:bg-gray-600' 
+                : 'bg-gray-800 cursor-not-allowed text-gray-500'
+            }`}
+          >
+            <Download className="w-4 h-4 mr-1" />
+            Download All
+          </button>
         </div>
         <input
           type="file"
@@ -266,7 +334,7 @@ const App = () => {
         />
       </div>
 
-      {/* Tabs for Open Files */}
+      {/* Rest of the component remains unchanged */}
       <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 flex items-center">
         {openFiles.map((file) => (
           <div
@@ -288,9 +356,7 @@ const App = () => {
         ))}
       </div>
 
-      {/* Main Content */}
       <div className="flex flex-1 w-full overflow-hidden">
-        {/* Sidebar */}
         <div
           className="bg-gray-800 flex-shrink-0 border-r border-gray-700 flex flex-col"
           style={{ width: sidebarWidth }}
@@ -308,7 +374,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* Resize Handle */}
         <div
           className="w-1 cursor-col-resize bg-gray-700 hover:bg-blue-500 flex-shrink-0"
           onMouseDown={(e) => {
@@ -330,21 +395,19 @@ const App = () => {
           }}
         />
 
-        {/* Editor */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {activeFile ? (
-            <div className="h-full flex flex-col ">
+            <div className="h-full flex flex-col">
               <div className="px-4 py-2 text-sm text-gray-400 bg-gray-800 border-b border-gray-700 flex-shrink-0">
                 {activeFile.name}
               </div>
               <div className="flex-1 p-4 overflow-hidden">
                 <textarea
                   key={activeFile.id}
-                  className="w-full h-full  bg-gray-900 text-white font-mono outline-none resize-none p-2 overflow-y-auto"
+                  className="w-full h-full bg-gray-900 text-white font-mono outline-none resize-none p-2 overflow-y-auto"
                   value={activeFile.content}
                   onChange={(e) => updateFileContent(e.target.value)}
-                  spellCheck="false" 
-                  
+                  spellCheck="false"
                 />
               </div>
             </div>
